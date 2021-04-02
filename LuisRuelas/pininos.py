@@ -3,16 +3,18 @@ import matplotlib.pyplot as plt
 import collections
 import argparse, sys
 import os
-# Para ejecutar (se puede cambiar el archivo por cualquier otro): python3 pininos.py --file ./data/repeated_10_scale_33/996782_repeated10_scale33.graphml
-# IMPORTANTE: mi script asume la existencia de una carpeta de "data" en su mismo nivel, pero pueden cambiar el archivo explorado con la bandera "file", con los archivos que acordamos descomprimidos
-# Descripción: saca las gráficas de los parámetros que son posibles obtener
-    # Grade distribution
-    # Clustering coefficient
-    # Diameter (como hay independencia de componentes, es infinito)
-    # Edge Betweenness (hay un problema con el calculo, puede verse en los comentarios)
+from progress.bar import Bar
+# Para ejecutar (se puede cambiar el folder): python3 pininos.py --folder ./data/repeated_10_scale_33/
+# Las instrucciones las redacté con ahinco :V, favor de usar: python3 pininos.py --help
+# Si tienen un xml, pueden usarlo en lugar de cargar el folder y esperar una eternidad
+# OJO tenemos el parametro "limit" (--limit), con el cual le indicamos el numero de archivos que estamos dispuestos a utilizar, son 1064, si quieren quemar su compu o tienen tiempo dejenlo en blanco, si no, ponganle unos 10
 parser=argparse.ArgumentParser()
 # in this case: ./data/repeated_10_scale_33/996782_repeated10_scale33.graphml
-parser.add_argument('--file', help='Graphml location to interpret')
+parser.add_argument('--folder', help='Folder containing the files to use')
+parser.add_argument('--limit', help='For testing, limit the numbers of file we will get')
+parser.add_argument('--input', help='If you already have an xml file to use, stop suffering, use it')
+parser.add_argument('--output', help='Optional output for file')
+
 args=parser.parse_args()
 
 def printDiameter(network):
@@ -66,34 +68,58 @@ def graphDictionary(x, y, title="Title", xlabel="x", ylabel="y"):
     ax.set_xticks([float(d) + float(0.4) for d in x])
     ax.set_xticklabels(x)
 
+fullGraphml = None
+cont = 0
+if (args.folder):
+    for dirpath, dirs, files in os.walk(args.folder):
+        print('Processing folder: '+dirpath)
+        bar = Bar('Processing', max= len(files) if not args.limit else int(args.limit))
+        for f in files:
+            if(args.limit):
+                cont+=1
+                if (int(args.limit) < cont):
+                    break
+            graphml = nx.read_graphml(os.path.join(dirpath, f))
+            if not fullGraphml:
+                fullGraphml = graphml
+            else:
+                nx.compose(fullGraphml, graphml)
+            bar.next()
+        bar.finish()
+    if args.output:
+        print('Printing file: ' + args.output)
+        nx.write_gexf(fullGraphml, args.output)
+elif (args.input):
+    fullGraphml = nx.read_gexf(args.input)
+else:
+    print('We need some substance here pal, specify input or folder')
+    exit()
 
-graphml = nx.read_graphml(args.file)
 options = {
     'node_color': 'blue',
     'node_size': 100,
     'width': 1.5,
     'arrowstyle': '-|>',
-    'arrowsize': 12,
+    'arrowsize': 5,
 }
-degrees = [d for n, d in graphml.degree()]
+
+degrees = [d for n, d in fullGraphml.degree()]
 sortedDegreesDesc = sorted(degrees, reverse=True)
 degreeCount = collections.Counter(sortedDegreesDesc)
 deg, cnt = zip(*degreeCount.items())
-#parametros
-printDiameter(graphml)
+
+print('Generating network visual representation...')
+graph = nx.draw(fullGraphml, arrows=True, **options)
+
+print('Generating diameter...')
+printDiameter(fullGraphml)
 graphDictionary(deg, cnt, title="Degree Distribution", xlabel="Grades", ylabel="Quantity")
 
-toupleXYBetwennessCentraily = getBetweennessCentralityXYTuple(graphml)
+print('Generating network Betweenness Centrality visual representation...')
+toupleXYBetwennessCentraily = getBetweennessCentralityXYTuple(fullGraphml)
 graphDictionary(toupleXYBetwennessCentraily[0], toupleXYBetwennessCentraily[1], title="Betweenness Centrality", xlabel="Node", ylabel='BCentrality')
 
-toupleXYClusteringCoefficient = getClusteringCoefficientXYTuple(graphml)
+print('Generating network Clustering Coefficient visual representation...')
+toupleXYClusteringCoefficient = getClusteringCoefficientXYTuple(fullGraphml)
 graphDictionary(toupleXYClusteringCoefficient[0], toupleXYClusteringCoefficient[1], title="Clustering Coefficients", xlabel="Node", ylabel='CCoeficients')
-
-#This is like "where to where", so I can't graph it normally, I may assign name to the connection?
-# toupleXYEdgeBetweennessCentrality = getEdgeBetweennessCentrality(graphml)
-# graphDictionary(toupleXYEdgeBetweennessCentrality[0], toupleXYEdgeBetweennessCentrality[1], title="Edge Betweenness Centrality", xlabel="connection", ylabel='EBCentrality')
-
 plt.show()
-
-# graph = nx.draw(graphml, arrows=True, **options)
-# plt.show()
